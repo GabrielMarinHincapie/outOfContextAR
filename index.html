@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <title>WebXR with GLTF Model</title>
+
+  <!-- three.js -->
+  <script src="https://unpkg.com/three@0.126.0/build/three.js"></script>
+  <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+<button onclick="activateXR()">Start WebXR AR</button>
+<script>
+async function activateXR() {
+  try {
+    const canvas = document.createElement("canvas");
+    document.body.appendChild(canvas);
+    const gl = canvas.getContext("webgl", {xrCompatible: true});
+
+    const scene = new THREE.Scene();
+
+    // Add lighting to illuminate the model
+    const ambientLight = new THREE.AmbientLight(0xffffff, .5); // Bright light for the scene
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, .5);
+    directionalLight.position.set(1, 1, 1).normalize();
+    scene.add(directionalLight);
+
+    // Load the GLTF model with the correct raw URL
+    const loader = new THREE.GLTFLoader();
+    const modelUrl = 'https://raw.githubusercontent.com/VINDICTAS/webxr-test/main/PolygonTest.glb';
+
+    loader.load(modelUrl, (gltf) => {
+      const model = gltf.scene;
+
+      // Adjust the size of the model
+      model.scale.set(0.3, 0.3, 0.3); // Adjust as needed
+
+      // Lower the model's position (Y axis)
+      model.position.set(0, -1, -3);  // Lower the model by 0.5 meters
+
+      // Add the model to the scene
+      scene.add(model);
+    }, undefined, (error) => {
+      console.error('An error occurred while loading the model:', error);
+    });
+
+    // Set up renderer
+    const renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      preserveDrawingBuffer: false,
+      canvas: canvas,
+      context: gl
+    });
+    renderer.autoClear = false;
+
+    // Create a camera
+    const camera = new THREE.PerspectiveCamera();
+    camera.matrixAutoUpdate = false;
+
+    // Start the WebXR session
+    const session = await navigator.xr.requestSession("immersive-ar");
+    session.updateRenderState({
+      baseLayer: new XRWebGLLayer(session, gl)
+    });
+
+    // Set up reference space
+    const referenceSpace = await session.requestReferenceSpace('local');
+
+    // Render loop
+    const onXRFrame = (time, frame) => {
+      session.requestAnimationFrame(onXRFrame);
+
+      // Bind framebuffer
+      gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
+
+      // Get device pose
+      const pose = frame.getViewerPose(referenceSpace);
+      if (pose) {
+        const view = pose.views[0];
+        const viewport = session.renderState.baseLayer.getViewport(view);
+        renderer.setSize(viewport.width, viewport.height);
+
+        // Update the camera matrices
+        camera.matrix.fromArray(view.transform.matrix);
+        camera.projectionMatrix.fromArray(view.projectionMatrix);
+        camera.updateMatrixWorld(true);
+
+        // Render the scene
+        renderer.render(scene, camera);
+      }
+    };
+    session.requestAnimationFrame(onXRFrame);
+  } catch (e) {
+    console.error("Failed to start AR session", e);
+  }
+}
+</script>
+</body>
+</html>
